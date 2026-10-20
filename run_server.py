@@ -1,6 +1,7 @@
 """
-Main server runner: boots the background ReposterEngine and FastAPI web server.
-Ideal for 24/7 background operation, Android (Termux / Pydroid), Linux VPS, or Windows.
+Main server runner: boots the background ReposterEngine and Web server.
+Uses Python's standard library (ThreadingHTTPServer) — ZERO external server dependencies!
+Runs seamlessly on Android (Termux with Python 3.14+), Linux VPS, macOS, or Windows.
 """
 
 from __future__ import annotations
@@ -8,7 +9,6 @@ import sys
 import os
 import argparse
 import socket
-import uvicorn
 
 if hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -24,11 +24,11 @@ if BASE_DIR not in sys.path:
 from core.config import ConfigManager
 from core.database import Database
 from core.engine import ReposterEngine
-from api.server import create_app
+from api.server import create_server
 
 
 def get_local_ip() -> str:
-    """Detect LAN IP address to display QR/link for Android device."""
+    """Detect LAN IP address to display link for mobile / local network devices."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
@@ -57,8 +57,7 @@ def main():
     if config_manager.config.server.auto_start and not args.no_auto_start:
         engine.start()
 
-    app = create_app(engine, config_manager, database)
-
+    server = create_server(engine, config_manager, database, host=host, port=port)
     local_ip = get_local_ip()
 
     print("\n" + "=" * 65)
@@ -69,15 +68,20 @@ def main():
         print(f"📱  Доступ з Android / мережі:   http://{local_ip}:{port}")
     print(f"⚙️   Статус фонового рушія:       {'АКТИВНИЙ ▶' if engine.is_running else 'ЗУПИНЕНО ⏹'}")
     print("=" * 65)
-    print("💡  Відкрийте посилання у браузері на комп'ютері або смартфоні")
-    print("    для керування ботом, перевірки логів та налаштування.\n")
+    print("💡  Відкрийте посилання у браузері на смартфоні чи комп'ютері.")
+    print("    Натисніть Ctrl+C для зупинки.\n")
 
     try:
-        uvicorn.run(app, host=host, port=port, log_level="warning")
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nОтримано сигнал зупинки...")
     finally:
+        server.shutdown()
+        server.server_close()
         if engine.is_running:
-            print("\nЗупиняємо рушій...")
+            print("Зупиняємо рушій...")
             engine.stop()
+        print("Сервер успішно зупинено.")
 
 
 if __name__ == "__main__":

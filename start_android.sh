@@ -1,34 +1,36 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
-# Скрипт швидкого запуску Репост Бота MRIYU на Android (Termux)
+# Скрипт запуску Репост Бота MRIYU на Android (Termux)
 # ==============================================================================
+
+set -e
 
 echo "----------------------------------------------------"
 echo "🤖 Запуск Репост Бота Telegram ➔ MRIYU на Android"
 echo "----------------------------------------------------"
 
-# Перевірка наявності Python
-if ! command -v python &> /dev/null; then
-    echo "📦 Python не знайдено. Встановлюємо python..."
-    pkg update -y && pkg install python -y
+# Перевірка та встановлення python
+if ! command -v python >/dev/null 2>&1; then
+    echo "📦 Встановлення python..."
+    pkg update -y && pkg install -y python
 fi
 
-# Встановлення необхідних залежностей
-echo "📦 Перевірка та встановлення залежностей..."
+# Встановлення єдиної необхідної залежності (requests)
+# Більше ніяких проблем з pydantic, rust чи PySide6!
+echo "📦 Перевірка бібліотеки requests..."
 pip install -r requirements.txt --quiet
 
 PORT=8080
 
 echo ""
-echo "🚀 Запускаємо фоновий сервер..."
-echo "📱 Веб-панель керування: http://localhost:${PORT}"
+echo "🚀 Запуск фонового веб-сервера..."
+echo "📱 Адреса панелі керування: http://localhost:${PORT}"
 echo ""
 
 # Автоматичне відкриття у браузері, якщо доступний termux-open-url
-if command -v termux-open-url &> /dev/null; then
-    sleep 2 && termux-open-url "http://localhost:${PORT}" &
+if command -v termux-open-url >/dev/null 2>&1; then
+    (sleep 2 && termux-open-url "http://localhost:${PORT}") &
 fi
 
 # Запуск сервера
 python run_server.py --host 0.0.0.0 --port ${PORT}
-
