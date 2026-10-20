@@ -1,0 +1,43 @@
+{
+  "telegram": {
+    "channel": "",
+    "mode": "scraper",
+    "bot_token": "",
+    "poll_interval": 60,
+    "initial_sync_count": 3
+  },
+  "filter": {
+    "keyword_blacklist": [],
+    "keyword_whitelist": [],
+    "min_length": 0,
+    "max_length": 0,
+    "ignore_forwards": false,
+    "allow_photos": true,
+    "allow_text_only": true,
+    "skip_links": false
+  },
+  "formatting": {
+    "header_prefix": "",
+    "footer_suffix": "",
+    "add_source_link": true,
+    "source_link_text": "Джерело в Telegram",
+    "remove_urls": false,
+    "remove_hashtags": false,
+    "convert_markdown": true,
+    "replacements": []
+  },
+  "mriyu": {
+    "token": "",
+    "target_type": "chat",
+    "target_id": "",
+    "silent": false,
+    "add_button": false,
+    "button_text": "Оригінал посту",
+    "button_url": ""
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "auto_start": true
+  }
+}
