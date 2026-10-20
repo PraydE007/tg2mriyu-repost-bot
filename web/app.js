@@ -1,6 +1,7 @@
 /**
  * Frontend logic for Repost Bot MRIYU.
- * Lightweight Vanilla JS with real-time status polling, config management, and diagnostics.
+ * Lightweight Vanilla JS with real-time status polling, config management, diagnostics,
+ * and Telethon MTProto client authentication.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -24,6 +25,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const settingsForm = document.getElementById("settingsForm");
   const tgMode = document.getElementById("tgMode");
   const tgBotTokenGroup = document.getElementById("tgBotTokenGroup");
+  const tgTelethonGroup = document.getElementById("tgTelethonGroup");
+  const tgApiId = document.getElementById("tgApiId");
+  const tgApiHash = document.getElementById("tgApiHash");
+  const tgPhone = document.getElementById("tgPhone");
+  const telethonStatusBadge = document.getElementById("telethonStatusBadge");
+  const telethonStatusText = document.getElementById("telethonStatusText");
+  const telethonDeliveryAlert = document.getElementById("telethonDeliveryAlert");
+  const btnTelethonSendCode = document.getElementById("btnTelethonSendCode");
+  const btnTelethonSignInBot = document.getElementById("btnTelethonSignInBot");
+  const btnTelethonCheckStatus = document.getElementById("btnTelethonCheckStatus");
+  const btnTelethonLogout = document.getElementById("btnTelethonLogout");
+  const telethonCodeGroup = document.getElementById("telethonCodeGroup");
+  const tgAuthCode = document.getElementById("tgAuthCode");
+  const tgAuthPassword = document.getElementById("tgAuthPassword");
+  const btnTelethonSignIn = document.getElementById("btnTelethonSignIn");
+
   const mriyuAddButton = document.getElementById("mriyuAddButton");
   const buttonSettingsRow = document.getElementById("buttonSettingsRow");
 
@@ -57,6 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let isEngineRunning = false;
   let statusPollTimer = null;
   let logsPollTimer = null;
+  let lastPhoneCodeHash = "";
 
   // ----------------------------------------------------
   // Toast Helper
@@ -90,9 +108,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // ----------------------------------------------------
   // Form conditional UI toggles
   // ----------------------------------------------------
-  tgMode.addEventListener("change", () => {
-    tgBotTokenGroup.style.display = tgMode.value === "bot_api" ? "block" : "none";
-  });
+  function updateModeVisibility() {
+    const mode = tgMode.value;
+    tgBotTokenGroup.style.display = mode === "bot_api" ? "block" : "none";
+    tgTelethonGroup.style.display = mode === "telethon" ? "block" : "none";
+    if (mode === "telethon") {
+      checkTelethonStatus();
+    }
+  }
+
+  tgMode.addEventListener("change", updateModeVisibility);
 
   mriyuAddButton.addEventListener("change", () => {
     buttonSettingsRow.style.display = mriyuAddButton.checked ? "grid" : "none";
@@ -192,6 +217,203 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ----------------------------------------------------
+  // Telethon Client Authentication Handlers
+  // ----------------------------------------------------
+  async function checkTelethonStatus() {
+    const api_id = tgApiId.value.trim();
+    const api_hash = tgApiHash.value.trim();
+    try {
+      const params = new URLSearchParams();
+      if (api_id) params.set("api_id", api_id);
+      if (api_hash) params.set("api_hash", api_hash);
+
+      const resp = await fetch(`/api/telethon/status?${params.toString()}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      if (!data.available) {
+        telethonStatusBadge.className = "telethon-status-pill not-auth";
+        telethonStatusText.textContent = "Telethon не встановлено в системі";
+        return;
+      }
+
+      if (data.authorized) {
+        telethonStatusBadge.className = "telethon-status-pill auth";
+        const u = data.user || {};
+        const title = u.first_name ? `${u.first_name} ${u.username ? '(@' + u.username + ')' : ''}` : (u.phone || 'Активна сесія');
+        telethonStatusText.textContent = `✅ Авторизовано: ${title}`;
+        btnTelethonLogout.style.display = "inline-flex";
+        telethonCodeGroup.style.display = "none";
+      } else {
+        telethonStatusBadge.className = "telethon-status-pill not-auth";
+        if (data.configured) {
+          telethonStatusText.textContent = "❌ Не авторизовано (потрібен вхід)";
+        } else {
+          telethonStatusText.textContent = "⚪ Введіть API ID та Hash";
+        }
+        btnTelethonLogout.style.display = "none";
+      }
+    } catch (err) {
+      console.warn("Telethon status check error:", err);
+    }
+  }
+
+  btnTelethonCheckStatus.addEventListener("click", () => {
+    checkTelethonStatus();
+    showToast("Статус Telethon оновлено", "info");
+  });
+
+  btnTelethonSendCode.addEventListener("click", async () => {
+    const api_id = tgApiId.value.trim();
+    const api_hash = tgApiHash.value.trim();
+    const phone = tgPhone.value.trim();
+
+    if (!api_id || !api_hash) {
+      showToast("Вкажіть Telegram API ID та API Hash", "error");
+      return;
+    }
+    if (!phone) {
+      showToast("Вкажіть номер телефону акаунта (+380...)", "error");
+      return;
+    }
+
+    btnTelethonSendCode.disabled = true;
+    btnTelethonSendCode.textContent = "Надсилаємо код...";
+
+    try {
+      const resp = await fetch("/api/telethon/send_code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_id, api_hash, phone })
+      });
+      const data = await resp.json();
+
+      if (data.ok) {
+        lastPhoneCodeHash = data.phone_code_hash;
+        telethonCodeGroup.style.display = "block";
+        if (telethonDeliveryAlert) {
+          telethonDeliveryAlert.innerHTML = `<strong>📩 Спосіб доставки:</strong> ${escapeHtml(data.message)}`;
+          telethonDeliveryAlert.style.borderColor = "#38bdf8";
+          telethonDeliveryAlert.style.color = "#f8fafc";
+        }
+        showToast(data.message || "Код надіслано в Telegram!", "success");
+        tgAuthCode.focus();
+      } else {
+        if (telethonDeliveryAlert) {
+          telethonCodeGroup.style.display = "block";
+          telethonDeliveryAlert.innerHTML = `<strong style="color: #f87171;">❌ Помилка Telegram:</strong> ${escapeHtml(data.error || "Не вдалося надіслати код")}`;
+          telethonDeliveryAlert.style.borderColor = "#ef4444";
+        }
+        showToast(data.error || "Не вдалося надіслати код", "error");
+      }
+    } catch (e) {
+      showToast("Помилка зв'язку з сервером", "error");
+    } finally {
+      btnTelethonSendCode.disabled = false;
+      btnTelethonSendCode.textContent = "📲 Надіслати код у Telegram";
+    }
+  });
+
+  btnTelethonSignIn.addEventListener("click", async () => {
+    const api_id = tgApiId.value.trim();
+    const api_hash = tgApiHash.value.trim();
+    const phone = tgPhone.value.trim();
+    const code = tgAuthCode.value.trim();
+    const password = tgAuthPassword.value.trim();
+
+    if (!code) {
+      showToast("Введіть код підтвердження з Telegram", "error");
+      return;
+    }
+
+    btnTelethonSignIn.disabled = true;
+    btnTelethonSignIn.textContent = "Перевіряємо код...";
+
+    try {
+      const resp = await fetch("/api/telethon/sign_in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_id,
+          api_hash,
+          phone,
+          code,
+          phone_code_hash: lastPhoneCodeHash,
+          password
+        })
+      });
+      const data = await resp.json();
+
+      if (data.ok) {
+        showToast(data.message || "Успішно увійшли в Telegram!", "success");
+        telethonCodeGroup.style.display = "none";
+        tgAuthCode.value = "";
+        tgAuthPassword.value = "";
+        checkTelethonStatus();
+      } else if (data.needs_password) {
+        showToast(data.message || "Введіть пароль двофакторної автентифікації 2FA", "error");
+        tgAuthPassword.focus();
+      } else {
+        showToast(data.error || data.message || "Помилка входу", "error");
+      }
+    } catch (e) {
+      showToast("Помилка запиту", "error");
+    } finally {
+      btnTelethonSignIn.disabled = false;
+      btnTelethonSignIn.textContent = "✅ Підтвердити та увійти";
+    }
+  });
+
+  if (btnTelethonSignInBot) {
+    btnTelethonSignInBot.addEventListener("click", async () => {
+      const api_id = tgApiId.value.trim();
+      const api_hash = tgApiHash.value.trim();
+      if (!api_id || !api_hash) {
+        showToast("Спочатку вкажіть API ID та API Hash", "error");
+        return;
+      }
+      const bot_token = prompt("Введіть токен Telegram бота з @BotFather:");
+      if (!bot_token || !bot_token.trim()) return;
+
+      btnTelethonSignInBot.disabled = true;
+      try {
+        const resp = await fetch("/api/telethon/sign_in_bot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ api_id, api_hash, bot_token: bot_token.trim() })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          showToast(data.message || "Telethon успішно авторизовано як бот!", "success");
+          checkTelethonStatus();
+        } else {
+          showToast(data.error || "Помилка авторизації бота", "error");
+        }
+      } catch (e) {
+        showToast("Помилка зв'язку з сервером", "error");
+      } finally {
+        btnTelethonSignInBot.disabled = false;
+      }
+    });
+  }
+
+  btnTelethonLogout.addEventListener("click", async () => {
+    if (!confirm("Ви дійсно бажаєте вийти із сесії Telethon?")) return;
+    try {
+      const resp = await fetch("/api/telethon/logout", { method: "POST" });
+      const data = await resp.json();
+      if (data.ok) {
+        showToast("Сесію Telethon завершено", "info");
+        checkTelethonStatus();
+      } else {
+        showToast(data.error || "Помилка виходу", "error");
+      }
+    } catch (e) {
+      showToast("Помилка зв'язку з сервером", "error");
+    }
+  });
+
+  // ----------------------------------------------------
   // Configuration Load & Save
   // ----------------------------------------------------
   async function loadConfig() {
@@ -206,7 +428,12 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("tgBotToken").value = cfg.telegram.bot_token || "";
       document.getElementById("tgPollInterval").value = cfg.telegram.poll_interval || 60;
       document.getElementById("tgSyncCount").value = cfg.telegram.initial_sync_count ?? 3;
-      tgBotTokenGroup.style.display = tgMode.value === "bot_api" ? "block" : "none";
+
+      tgApiId.value = cfg.telegram.api_id || "";
+      tgApiHash.value = cfg.telegram.api_hash || "";
+      tgPhone.value = cfg.telegram.phone || "";
+
+      updateModeVisibility();
 
       // MRIYU
       document.getElementById("mriyuToken").value = cfg.mriyu.token || "";
@@ -266,6 +493,9 @@ document.addEventListener("DOMContentLoaded", () => {
         bot_token: document.getElementById("tgBotToken").value.trim(),
         poll_interval: parseInt(document.getElementById("tgPollInterval").value, 10) || 60,
         initial_sync_count: parseInt(document.getElementById("tgSyncCount").value, 10) || 0,
+        api_id: tgApiId.value.trim(),
+        api_hash: tgApiHash.value.trim(),
+        phone: tgPhone.value.trim(),
       },
       mriyu: {
         token: document.getElementById("mriyuToken").value.trim(),
@@ -381,61 +611,46 @@ document.addEventListener("DOMContentLoaded", () => {
 
       historyList.innerHTML = "";
       if (posts.length === 0) {
-        historyList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 30px;">Історія оброблених постів порожня</div>`;
+        historyList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 30px;">Історія поки порожня</div>`;
         return;
       }
 
       posts.forEach(p => {
-        const card = document.createElement("div");
-        card.className = "post-card";
+        const item = document.createElement("div");
+        item.className = "post-card";
+        const statusColor = p.status === "reposted" ? "#34d399" : (p.status === "filtered" ? "#fbbf24" : "#f87171");
+        const statusTitle = p.status === "reposted" ? "Репостнуто" : (p.status === "filtered" ? "Відфільтровано" : "Помилка");
 
-        let statusClass = "badge-stopped";
-        let statusTitle = "Помилка";
-        if (p.status === "reposted") {
-          statusClass = "badge-running";
-          statusTitle = "Опубліковано";
-        } else if (p.status === "filtered") {
-          statusClass = "";
-          statusTitle = "Відфільтровано";
-        }
-
-        const photoBadge = p.has_photo ? '<span style="color: var(--accent-cyan);">📷 Фото</span>' : '<span>📝 Текст</span>';
-        const msgIdBadge = p.mriyu_msg_id ? `<span style="color: #34d399;">MRIYU ID: ${p.mriyu_msg_id}</span>` : '';
-        const detailInfo = p.error_detail ? `<div style="font-size: 0.8rem; color: #f87171; margin-top: 4px;">Причина / деталь: ${escapeHtml(p.error_detail)}</div>` : '';
-
-        card.innerHTML = `
+        item.innerHTML = `
           <div class="post-header">
             <div>
-              <strong style="color: var(--text-main);">${escapeHtml(p.post_id)}</strong> 
-              • ${photoBadge} • ${escapeHtml(p.created_at)}
+              <strong>${escapeHtml(p.post_id)}</strong> 
+              <span style="margin-left: 8px; color: ${statusColor}; font-weight: 600;">● ${statusTitle}</span>
+              ${p.mriyu_msg_id ? `<span style="margin-left: 8px; color: var(--accent-cyan);">(MRIYU ID: ${p.mriyu_msg_id})</span>` : ""}
             </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              ${msgIdBadge}
-              <span class="badge ${statusClass}" style="font-size: 0.75rem; padding: 3px 8px;">${statusTitle}</span>
-            </div>
+            <div>${p.created_at || ""}</div>
           </div>
-          <div class="post-body">${escapeHtml(p.text_snippet || "(порожній вміст)")}</div>
-          ${detailInfo}
+          <div class="post-body">${escapeHtml(p.text_snippet || "(без тексту)")}</div>
+          ${p.error_detail ? `<div style="font-size: 0.8rem; color: #f87171;">Причина / Деталі: ${escapeHtml(p.error_detail)}</div>` : ""}
         `;
-        historyList.appendChild(card);
+        historyList.appendChild(item);
       });
     } catch (e) {
-      console.error("History fetch error:", e);
+      console.warn("History fetch error:", e);
     }
   }
 
   btnRefreshHistory.addEventListener("click", loadHistory);
 
   btnClearHistory.addEventListener("click", async () => {
-    if (!confirm("Ви впевнені, що хочете очистити всю історію оброблених постів?")) return;
+    if (!confirm("Ви впевнені, що хочете скинути історію постів? Після цього наявні пости можуть бути репостнуті знову.")) return;
     try {
-      const resp = await fetch("/api/posts/clear", { method: "POST" });
-      const res = await resp.json();
-      showToast(res.message, "info");
+      await fetch("/api/posts/clear", { method: "POST" });
       loadHistory();
       fetchStatus();
+      showToast("Історію постів очищено", "info");
     } catch (e) {
-      showToast("Помилка очищення", "error");
+      showToast("Помилка", "error");
     }
   });
 
@@ -443,9 +658,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Logs Tab
   // ----------------------------------------------------
   async function loadLogs() {
-    const level = logLevelFilter.value;
-    const url = `/api/logs?limit=120${level ? `&level=${level}` : ""}`;
     try {
+      const level = logLevelFilter.value;
+      const url = level ? `/api/logs?level=${level}&limit=100` : "/api/logs?limit=100";
       const resp = await fetch(url);
       if (!resp.ok) return;
       const logs = await resp.json();
@@ -456,7 +671,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      // Reverse so newest at bottom or render properly
       const reversed = [...logs].reverse();
       reversed.forEach(l => {
         const row = document.createElement("div");
@@ -494,26 +708,30 @@ document.addEventListener("DOMContentLoaded", () => {
   btnDiagTestTg.addEventListener("click", async () => {
     const ch = diagTgChannel.value.trim() || document.getElementById("tgChannel").value.trim();
     if (!ch) {
-      showToast("Вкажіть назву каналу Telegram", "error");
+      showToast("Вкажіть назву або посилання на канал Telegram", "error");
       return;
     }
+
+    const mode = tgMode.value;
+    const api_id = tgApiId.value.trim();
+    const api_hash = tgApiHash.value.trim();
 
     btnDiagTestTg.disabled = true;
     btnDiagTestTg.textContent = "Перевіряємо...";
     diagTgResult.style.display = "block";
-    diagTgResult.innerHTML = `<div style="color: var(--text-muted);">Опитування каналу https://t.me/s/${escapeHtml(ch)}...</div>`;
+    diagTgResult.innerHTML = `<div style="color: var(--text-muted);">Опитування каналу ${escapeHtml(ch)} (режим: ${mode})...</div>`;
 
     try {
       const resp = await fetch("/api/test/telegram", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel: ch })
+        body: JSON.stringify({ channel: ch, mode, api_id, api_hash })
       });
       const data = await resp.json();
 
       if (data.ok) {
         let html = `<div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 12px; border-radius: 8px; margin-bottom: 12px;">
-          <strong style="color: #34d399;">✅ Канал знайдено!</strong> Отримано постів: ${data.count}. Нижче показано останні пости:
+          <strong style="color: #34d399;">✅ Канал знайдено!</strong> Отримано постів: ${data.count}. Останні пости:
         </div>`;
 
         (data.posts || []).forEach(p => {
@@ -524,7 +742,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span>${p.photos?.length ? `📷 Фото (${p.photos.length})` : '📝 Текст'}</span>
               </div>
               <div class="post-body">${escapeHtml(p.raw_text || "(без тексту)")}</div>
-              ${p.photos?.length ? `<div style="margin-top: 6px;"><img src="${escapeHtml(p.photos[0])}" style="max-height: 140px; border-radius: 6px;"></div>` : ''}
+              ${p.photos?.length && p.photos[0].startsWith('http') ? `<div style="margin-top: 6px;"><img src="${escapeHtml(p.photos[0])}" style="max-height: 140px; border-radius: 6px;"></div>` : ''}
             </div>
           `;
         });
@@ -619,4 +837,3 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 3500);
 });
-

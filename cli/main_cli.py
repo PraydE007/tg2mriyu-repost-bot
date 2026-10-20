@@ -1,6 +1,6 @@
 """
 Command Line Interface (CLI) for Repost Bot MRIYU.
-Supports direct terminal commands and an interactive menu.
+Allows managing the bot without GUI or web browser.
 """
 
 from __future__ import annotations
@@ -8,13 +8,7 @@ import sys
 import os
 import time
 import argparse
-
-# Ensure proper UTF-8 stdout encoding in Windows consoles
-if hasattr(sys.stdout, 'reconfigure'):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
+from typing import Optional
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
@@ -29,9 +23,9 @@ from core.tg_scraper import TelegramScraper
 
 def print_banner():
     print("""
-======================================================
-  🤖 РЕПОСТ БОТ: TELEGRAM ➔ MRIYU (CLI)
-======================================================
+==================================================
+   ⚡ РЕПОСТ БОТ: TELEGRAM ➔ MRIYU (CLI) ⚡
+==================================================
     """)
 
 
@@ -41,6 +35,10 @@ def cmd_status(cm: ConfigManager, db: Database):
     print("\n--- ПОТОЧНИЙ СТАН ---")
     print(f"Telegram канал:        {cfg.telegram.channel or '(не вказано)'}")
     print(f"Режим зчитування:      {cfg.telegram.mode}")
+    if cfg.telegram.mode == "telethon":
+        print(f"Telethon API ID:       {cfg.telegram.api_id or '(не вказано)'}")
+        print(f"Telethon API Hash:     {'налаштовано' if cfg.telegram.api_hash else '(не вказано)'}")
+        print(f"Telethon телефон:      {cfg.telegram.phone or '(не вказано)'}")
     print(f"Інтервал перевірки:    {cfg.telegram.poll_interval} сек.")
     print(f"MRIYU ціль:            {cfg.mriyu.target_type} ID: {cfg.mriyu.target_id or '(не вказано)'}")
     print(f"Токен MRIYU:           {'налаштовано' if cfg.mriyu.token else '(не вказано)'}")
@@ -91,16 +89,37 @@ def cmd_test_mriyu(cm: ConfigManager, token: str = None):
         print("Не вдалося отримати список чатів бота.")
 
 
-def cmd_test_tg(channel: str):
+def cmd_test_tg(cm: ConfigManager, channel: str):
     if not channel:
         print("❌ Помилка: вкажіть назву каналу (наприклад: python run_cli.py test-tg durov)")
         return
+
+    cfg = cm.config
+    if cfg.telegram.mode == "telethon":
+        from core.tg_telethon import TelethonService
+        service = TelethonService.get_instance()
+        print(f"🔍 Опитування через Telethon '{channel}' ...")
+        try:
+            posts = service.fetch_channel_posts(channel, limit=5, api_id=cfg.telegram.api_id, api_hash=cfg.telegram.api_hash)
+            if not posts:
+                print("❌ Telethon не повернув постів з цього каналу.")
+                return
+            print(f"✅ Знайдено {len(posts)} постів:\n")
+            for p in posts[-3:]:
+                print(f"[{p.post_id}] {p.datetime_str}")
+                print(f"Фото: {len(p.photos)} шт. | Посилання: {p.post_url}")
+                snippet = (p.raw_text or "").replace("\n", " ")[:120]
+                print(f"Текст: {snippet}...\n")
+            return
+        except Exception as e:
+            print(f"❌ Помилка Telethon: {e}")
+            return
 
     clean = TelegramScraper.clean_channel_name(channel)
     print(f"🔍 Опитування публічного каналу https://t.me/s/{clean} ...")
     posts = TelegramScraper.fetch_channel_posts(clean)
     if not posts:
-        print(f"❌ Не вдалося отримати пости з каналу '{clean}'. Перевірте публічність каналу.")
+        print(f"❌ Не вдалося отримати пости з каналу '{clean}'. Перевірте публічність каналу або увімкніть Telethon.")
         return
 
     print(f"✅ Знайдено {len(posts)} постів. Останні пости:\n")
@@ -121,7 +140,6 @@ def cmd_run(cm: ConfigManager, db: Database):
     try:
         while True:
             time.sleep(2)
-            # Print new logs
             logs = db.get_recent_logs(limit=10)
             if logs:
                 for l in reversed(logs):
@@ -142,7 +160,7 @@ def interactive_menu(cm: ConfigManager, db: Database):
         print("3. Перевірити Telegram канал")
         print("4. Перевірити MRIYU токен та канали")
         print("5. Переглянути останні логи")
-        print("6. Швидке налаштування (канал, токен, chat_id)")
+        print("6. Швидке налаштування (канал, токен, chat_id, Telethon)")
         print("0. Вихід")
         choice = input("\nОберіть дію [0-6]: ").strip()
 
@@ -151,8 +169,8 @@ def interactive_menu(cm: ConfigManager, db: Database):
         elif choice == "2":
             cmd_run(cm, db)
         elif choice == "3":
-            ch = input("Введіть назву Telegram каналу: ").strip()
-            cmd_test_tg(ch)
+            ch = input(f"Введіть назву Telegram каналу [{cm.config.telegram.channel}]: ").strip() or cm.config.telegram.channel
+            cmd_test_tg(cm, ch)
         elif choice == "4":
             t = input(f"Введіть токен MRIYU [{cm.config.mriyu.token}]: ").strip() or cm.config.mriyu.token
             cmd_test_mriyu(cm, t)
@@ -160,12 +178,23 @@ def interactive_menu(cm: ConfigManager, db: Database):
             cmd_logs(db, limit=20)
         elif choice == "6":
             ch = input(f"Telegram канал [{cm.config.telegram.channel}]: ").strip()
+            mode = input(f"Режим (scraper / telethon / bot_api) [{cm.config.telegram.mode}]: ").strip()
             tok = input(f"Токен MRIYU [{cm.config.mriyu.token}]: ").strip()
             cid = input(f"MRIYU chat_id [{cm.config.mriyu.target_id}]: ").strip()
             upd = {}
             if ch: upd.setdefault("telegram", {})["channel"] = ch
+            if mode: upd.setdefault("telegram", {})["mode"] = mode
             if tok: upd.setdefault("mriyu", {})["token"] = tok
             if cid: upd.setdefault("mriyu", {})["target_id"] = cid
+
+            if mode == "telethon" or (not mode and cm.config.telegram.mode == "telethon"):
+                api_id = input(f"Telethon API ID [{cm.config.telegram.api_id}]: ").strip()
+                api_hash = input(f"Telethon API Hash [{cm.config.telegram.api_hash}]: ").strip()
+                phone = input(f"Telethon телефон [{cm.config.telegram.phone}]: ").strip()
+                if api_id: upd.setdefault("telegram", {})["api_id"] = api_id
+                if api_hash: upd.setdefault("telegram", {})["api_hash"] = api_hash
+                if phone: upd.setdefault("telegram", {})["phone"] = phone
+
             if upd:
                 cm.update(upd)
                 print("✅ Налаштування збережено!")
@@ -185,7 +214,7 @@ def main():
     subparsers.add_parser("run", help="Запустити рушій в консолі")
     subparsers.add_parser("logs", help="Показати останні логи")
 
-    tg_p = subparsers.add_parser("test-tg", help="Перевірити публічний TG канал")
+    tg_p = subparsers.add_parser("test-tg", help="Перевірити TG канал")
     tg_p.add_argument("channel", nargs="?", default="", help="Назва каналу")
 
     mr_p = subparsers.add_parser("test-mriyu", help="Перевірити токен та чати в MRIYU")
@@ -201,7 +230,7 @@ def main():
         cmd_logs(db)
     elif args.subcommand == "test-tg":
         ch = args.channel or cm.config.telegram.channel
-        cmd_test_tg(ch)
+        cmd_test_tg(cm, ch)
     elif args.subcommand == "test-mriyu":
         cmd_test_mriyu(cm, args.token)
     else:

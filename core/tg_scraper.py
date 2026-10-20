@@ -5,6 +5,7 @@ Parses text, HTML formatting, photos, forwards, and post metadata.
 """
 
 from __future__ import annotations
+import os
 import re
 import urllib.request
 import urllib.parse
@@ -19,7 +20,7 @@ class TelegramPost:
     message_id: int  # e.g. 460
     raw_text: str  # HTML text content
     datetime_str: str  # ISO string or ""
-    photos: List[str] = field(default_factory=list)  # list of image URLs
+    photos: List[str] = field(default_factory=list)  # list of image URLs or local paths
     is_forward: bool = False
     views: str = ""
     post_url: str = ""
@@ -151,7 +152,19 @@ class TelegramScraper:
 
     @classmethod
     def download_image_bytes(cls, image_url: str, timeout: int = 15) -> Optional[bytes]:
-        """Download image bytes from CDN for multipart upload."""
+        """Download image bytes from CDN or read from local disk for multipart upload."""
+        if not image_url:
+            return None
+
+        # Check if local file path on disk (e.g. from Telethon cache)
+        if os.path.isfile(image_url):
+            try:
+                with open(image_url, "rb") as f:
+                    return f.read()
+            except Exception as e:
+                print(f"[TelegramScraper] Failed to read local image file {image_url}: {e}")
+                return None
+
         req = urllib.request.Request(
             image_url,
             headers={"User-Agent": cls.USER_AGENT}
@@ -162,4 +175,3 @@ class TelegramScraper:
         except Exception as e:
             print(f"[TelegramScraper] Failed to download image from {image_url}: {e}")
             return None
-

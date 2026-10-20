@@ -1,3 +1,4 @@
-# Єдина обов'язкова залежність для ядра бота та Web UI:
+# Обов'язкові залежності для ядра бота та Web UI:
 # (100% сумісна з Android Termux, Python 3.14+, Linux, Windows, macOS)
 requests>=2.31.0
+telethon>=1.36.0

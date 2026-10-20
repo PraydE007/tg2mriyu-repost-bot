@@ -18,6 +18,7 @@ from core.database import Database
 from core.engine import ReposterEngine
 from core.mriyu_client import MriyuClient
 from core.tg_scraper import TelegramScraper
+from core.tg_telethon import TelethonService
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 
@@ -85,6 +86,15 @@ class BotRequestHandler(BaseHTTPRequestHandler):
             self.send_json(self.database.get_recent_posts(limit=limit))
             return
 
+        if path == "/api/telethon/status":
+            cfg = self.config_manager.config
+            service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+            api_id = query.get("api_id", [cfg.telegram.api_id])[0]
+            api_hash = query.get("api_hash", [cfg.telegram.api_hash])[0]
+            status = service.get_status(api_id=api_id, api_hash=api_hash)
+            self.send_json(status)
+            return
+
         # Static file serving
         self.serve_static(path)
 
@@ -124,6 +134,96 @@ class BotRequestHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "message": "Історію оброблених постів очищено"})
             return
 
+        # Telethon Endpoints
+        if path == "/api/telethon/send_code":
+            payload = self.read_json_body()
+            cfg = self.config_manager.config
+            phone = (payload.get("phone") or cfg.telegram.phone or "").strip()
+            api_id = (payload.get("api_id") or cfg.telegram.api_id or "").strip()
+            api_hash = (payload.get("api_hash") or cfg.telegram.api_hash or "").strip()
+
+            if not api_id or not api_hash:
+                self.send_json({"ok": False, "error": "Вкажіть api_id та api_hash"}, 400)
+                return
+            if not phone:
+                self.send_json({"ok": False, "error": "Вкажіть номер телефону"}, 400)
+                return
+
+            service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+            res = service.send_auth_code(phone=phone, api_id=api_id, api_hash=api_hash)
+            if res.get("ok"):
+                self.config_manager.update({
+                    "telegram": {
+                        "api_id": api_id,
+                        "api_hash": api_hash,
+                        "phone": phone
+                    }
+                })
+            self.send_json(res)
+            return
+
+        if path == "/api/telethon/sign_in":
+            payload = self.read_json_body()
+            cfg = self.config_manager.config
+            phone = (payload.get("phone") or cfg.telegram.phone or "").strip()
+            code = (payload.get("code") or "").strip()
+            phone_code_hash = (payload.get("phone_code_hash") or "").strip()
+            password = (payload.get("password") or "").strip()
+            api_id = (payload.get("api_id") or cfg.telegram.api_id or "").strip()
+            api_hash = (payload.get("api_hash") or cfg.telegram.api_hash or "").strip()
+
+            service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+            res = service.sign_in(
+                phone=phone,
+                code=code,
+                phone_code_hash=phone_code_hash,
+                password=password,
+                api_id=api_id,
+                api_hash=api_hash
+            )
+            if res.get("ok"):
+                self.config_manager.update({
+                    "telegram": {
+                        "mode": "telethon",
+                        "api_id": api_id,
+                        "api_hash": api_hash,
+                        "phone": phone
+                    }
+                })
+                self.database.add_log("SUCCESS", f"Telethon успішно авторизовано: {res.get('message')}")
+            self.send_json(res)
+            return
+
+        if path == "/api/telethon/sign_in_bot":
+            payload = self.read_json_body()
+            cfg = self.config_manager.config
+            bot_token = (payload.get("bot_token") or cfg.telegram.bot_token or "").strip()
+            api_id = (payload.get("api_id") or cfg.telegram.api_id or "").strip()
+            api_hash = (payload.get("api_hash") or cfg.telegram.api_hash or "").strip()
+
+            service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+            res = service.sign_in_bot(bot_token=bot_token, api_id=api_id, api_hash=api_hash)
+            if res.get("ok"):
+                self.config_manager.update({
+                    "telegram": {
+                        "mode": "telethon",
+                        "api_id": api_id,
+                        "api_hash": api_hash,
+                        "bot_token": bot_token
+                    }
+                })
+                self.database.add_log("SUCCESS", f"Telethon (Bot) успішно авторизовано: {res.get('message')}")
+            self.send_json(res)
+            return
+
+        if path == "/api/telethon/logout":
+            cfg = self.config_manager.config
+            service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+            res = service.logout()
+            self.database.add_log("WARNING", "Сесію Telethon скинуто")
+            self.send_json(res)
+            return
+
         if path == "/api/test/mriyu":
             payload = self.read_json_body()
             token = (payload.get("token") or "").strip()
@@ -152,17 +252,49 @@ class BotRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/test/telegram":
             payload = self.read_json_body()
-            channel = (payload.get("channel") or "").strip()
+            cfg = self.config_manager.config
+            channel = (payload.get("channel") or cfg.telegram.channel or "").strip()
+            mode = (payload.get("mode") or cfg.telegram.mode or "scraper").strip()
+            api_id = (payload.get("api_id") or cfg.telegram.api_id or "").strip()
+            api_hash = (payload.get("api_hash") or cfg.telegram.api_hash or "").strip()
+
             if not channel:
-                self.send_json({"ok": False, "message": "Вкажіть назву Telegram каналу"}, 400)
+                self.send_json({"ok": False, "message": "Вкажіть назву або посилання на Telegram канал"}, 400)
                 return
 
+            if mode == "telethon":
+                service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+                try:
+                    posts = service.fetch_channel_posts(channel_input=channel, limit=5, api_id=api_id, api_hash=api_hash)
+                    if not posts:
+                        self.send_json({
+                            "ok": False,
+                            "channel": channel,
+                            "message": "Telethon не повернув постів з цього чату/каналу (перевірте, чи є ви учасником або чи є повідомлення)."
+                        })
+                        return
+                    self.send_json({
+                        "ok": True,
+                        "channel": channel,
+                        "count": len(posts),
+                        "posts": [p.to_dict() for p in posts[-5:]]
+                    })
+                    return
+                except Exception as e:
+                    self.send_json({
+                        "ok": False,
+                        "channel": channel,
+                        "message": f"Помилка Telethon: {str(e)}"
+                    })
+                    return
+
+            # Scraper mode
             posts = TelegramScraper.fetch_channel_posts(channel)
             if not posts:
                 self.send_json({
                     "ok": False,
                     "channel": channel,
-                    "message": "Не вдалося отримати пости. Перевірте, чи канал є публічним та чи правильно введено назву."
+                    "message": "Не вдалося отримати пости. Перевірте, чи канал є публічним та чи правильно введено назву (для приватних каналів оберіть режим Telethon)."
                 })
                 return
 

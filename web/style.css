@@ -360,6 +360,37 @@ textarea:focus {
   cursor: pointer;
 }
 
+/* Telethon UI Box */
+.telethon-box {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 14px;
+}
+
+.telethon-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.telethon-status-pill.auth {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.telethon-status-pill.not-auth {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
 /* Replacements Table */
 .replacements-table {
   width: 100%;
@@ -499,4 +530,3 @@ textarea:focus {
     justify-content: center;
   }
 }
-

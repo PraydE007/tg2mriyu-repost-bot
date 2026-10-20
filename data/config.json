@@ -1,10 +1,14 @@
 {
   "telegram": {
-    "channel": "",
+    "channel": "https://t.me/c/1224603898/1493",
     "mode": "scraper",
     "bot_token": "",
-    "poll_interval": 60,
-    "initial_sync_count": 3
+    "poll_interval": 240,
+    "initial_sync_count": 0,
+    "api_id": "32699393",
+    "api_hash": "9baaa53b2e4b4be011e6e9d266edc16f",
+    "phone": "+380955755505",
+    "session_name": "telethon_session"
   },
   "filter": {
     "keyword_blacklist": [],
@@ -13,23 +17,23 @@
     "max_length": 0,
     "ignore_forwards": false,
     "allow_photos": true,
-    "allow_text_only": true,
+    "allow_text_only": false,
     "skip_links": false
   },
   "formatting": {
     "header_prefix": "",
     "footer_suffix": "",
-    "add_source_link": true,
+    "add_source_link": false,
     "source_link_text": "Джерело в Telegram",
-    "remove_urls": false,
+    "remove_urls": true,
     "remove_hashtags": false,
     "convert_markdown": true,
     "replacements": []
   },
   "mriyu": {
-    "token": "",
+    "token": "2:ziMe99YDMbGBXAXBiabiKBdUxl7T6xlApTu4Z6vw",
     "target_type": "chat",
-    "target_id": "",
+    "target_id": "0",
     "silent": false,
     "add_button": false,
     "button_text": "Оригінал посту",

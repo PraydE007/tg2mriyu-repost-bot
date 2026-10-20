@@ -106,12 +106,16 @@ class ReposterEngine:
             self.db.add_log("WARNING", "Не вказано Telegram канал у налаштуваннях")
             return
 
+        if cfg.telegram.mode == "telethon" and (not cfg.telegram.api_id.strip() or not cfg.telegram.api_hash.strip()):
+            self.db.add_log("WARNING", "Для режиму Telethon вкажіть api_id та api_hash у налаштуваннях")
+            return
+
         if not cfg.mriyu.token.strip():
             self.db.add_log("WARNING", "Не вказано токен бота MRIYU")
             return
 
-        if not cfg.mriyu.target_id.strip():
-            self.db.add_log("WARNING", "Не вказано ID цільового каналу або користувача MRIYU")
+        if not cfg.mriyu.target_id.strip() or str(cfg.mriyu.target_id).strip() == "0":
+            self.db.add_log("WARNING", "Не вказано правильний ID цільового каналу або чату MRIYU (зараз 0 або порожньо)")
             return
 
         # Fetch posts
@@ -139,7 +143,32 @@ class ReposterEngine:
             self._process_single_post(post, cfg, formatter, mriyu)
 
     def _fetch_posts(self, cfg: AppConfig) -> List[TelegramPost]:
-        if cfg.telegram.mode == "bot_api" and cfg.telegram.bot_token.strip():
+        if cfg.telegram.mode == "telethon":
+            from .tg_telethon import TelethonService
+            service = TelethonService.get_instance(cfg.telegram.session_name or "telethon_session")
+            if not service.is_available():
+                self.db.add_log("ERROR", "Бібліотеку telethon не знайдено (виконайте pip install telethon)")
+                return []
+            status = service.get_status(api_id=cfg.telegram.api_id, api_hash=cfg.telegram.api_hash)
+            if not status.get("authorized"):
+                self.db.add_log(
+                    "WARNING",
+                    "Telethon не авторизовано. Зайдіть у Налаштування бота для авторизації за номером телефону."
+                )
+                return []
+            try:
+                limit = max(15, cfg.telegram.initial_sync_count * 2) if cfg.telegram.initial_sync_count > 0 else 15
+                return service.fetch_channel_posts(
+                    channel_input=cfg.telegram.channel,
+                    limit=limit,
+                    api_id=cfg.telegram.api_id,
+                    api_hash=cfg.telegram.api_hash
+                )
+            except Exception as e:
+                self.db.add_log("ERROR", f"Помилка Telethon при читанні каналу '{cfg.telegram.channel}': {e}")
+                return []
+
+        elif cfg.telegram.mode == "bot_api" and cfg.telegram.bot_token.strip():
             # Bot API mode
             bot_client = TelegramBotClient(cfg.telegram.bot_token)
             updates = bot_client.get_updates()
@@ -249,7 +278,7 @@ class ReposterEngine:
                 is_caption=True
             )
 
-            # Download photo bytes
+            # Download photo bytes (from web URL or local Telethon file)
             photo_bytes = TelegramScraper.download_image_bytes(image_url)
 
             # Send photo to MRIYU
@@ -257,7 +286,7 @@ class ReposterEngine:
                 target_id=cfg.mriyu.target_id,
                 target_type=cfg.mriyu.target_type,
                 photo_bytes=photo_bytes,
-                photo_url=image_url if not photo_bytes else None,
+                photo_url=image_url if not photo_bytes and image_url.startswith("http") else None,
                 caption=caption,
                 buttons=buttons,
                 silent=cfg.mriyu.silent,
@@ -279,10 +308,10 @@ class ReposterEngine:
                 desc = res.get("description", "Невідома помилка")
                 err_code = res.get("error_code", "")
                 self.db.add_log("ERROR", f"Помилка відправки фото {post.post_id} в MRIYU: {desc} (код: {err_code})")
-                
+
                 # Fallback: try sending as text message if photo failed
                 text_content = formatter.format_text(
-                    raw_text=f"{post.raw_text}\n\n[Переглянути фото]({image_url})",
+                    raw_text=f"{post.raw_text}\n\n[Переглянути фото]({image_url})" if image_url.startswith("http") else post.raw_text,
                     post_url=post.post_url,
                     is_caption=False
                 )
@@ -373,4 +402,3 @@ class ReposterEngine:
                 buttons=buttons,
                 silent=cfg.mriyu.silent,
             )
-

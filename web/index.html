@@ -88,19 +88,87 @@
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="tgChannel">Канал Telegram (назва або посилання)</label>
-              <input type="text" id="tgChannel" placeholder="наприклад: durov або https://t.me/durov" required>
-              <div class="form-hint">Публічний канал можна читати напряму без токенів та авторизацій.</div>
+              <label for="tgChannel">Канал Telegram (назва, посилання або числовий ID)</label>
+              <input type="text" id="tgChannel" placeholder="durov, https://t.me/durov або web.telegram.org/k/#-1224603898" required>
+              <div class="form-hint">Для публічних каналів підходить юзернейм або t.me-лінк. Для приватних чатів/каналів використовуйте режим Telethon.</div>
             </div>
             <div class="form-group">
               <label for="tgMode">Режим зчитування</label>
               <select id="tgMode">
                 <option value="scraper">Web-скрейпер (без ключів, публічні канали)</option>
+                <option value="telethon">Telethon клієнт (api_id + api_hash, приватні та публічні канали)</option>
                 <option value="bot_api">Telegram Bot API (потрібен токен бота)</option>
               </select>
             </div>
           </div>
-          <div class="form-row">
+
+          <!-- Telethon Group -->
+          <div id="tgTelethonGroup" class="telethon-box" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <span style="font-weight: 700; color: var(--accent-cyan);">🔑 Telethon (MTProto Client API)</span>
+              <div id="telethonStatusBadge" class="telethon-status-pill not-auth">
+                <span>●</span> <span id="telethonStatusText">Не авторизовано</span>
+              </div>
+            </div>
+
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;">
+              Читає повідомлення з <strong>будь-яких каналів, закритих груп та чатів</strong>, де ви є учасником (включаючи веб-посилання <code>web.telegram.org/k/#-1224603898</code>).
+              Отримайте <code>api_id</code> та <code>api_hash</code> безкоштовно на 
+              <a href="https://my.telegram.org" target="_blank" style="color: var(--accent-cyan); text-decoration: underline;">my.telegram.org</a> (розділ «API development tools»).
+            </p>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="tgApiId">Telegram API ID</label>
+                <input type="text" id="tgApiId" placeholder="наприклад: 12345678">
+              </div>
+              <div class="form-group">
+                <label for="tgApiHash">Telegram API Hash</label>
+                <input type="password" id="tgApiHash" placeholder="наприклад: 0123456789abcdef0123456789abcdef">
+              </div>
+              <div class="form-group">
+                <label for="tgPhone">Номер телефону акаунта</label>
+                <input type="text" id="tgPhone" placeholder="+380991234567">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 6px;">
+              <button type="button" id="btnTelethonSendCode" class="btn btn-primary btn-sm">
+                📲 Надіслати код у Telegram
+              </button>
+              <button type="button" id="btnTelethonSignInBot" class="btn btn-outline btn-sm" title="Авторизація без телефону через токен бота з @BotFather">
+                🤖 Увійти через токен бота
+              </button>
+              <button type="button" id="btnTelethonCheckStatus" class="btn btn-outline btn-sm">
+                🔄 Перевірити статус
+              </button>
+              <button type="button" id="btnTelethonLogout" class="btn btn-danger btn-sm" style="display: none;">
+                🚪 Вийти із сесії
+              </button>
+            </div>
+
+            <!-- Code input group (hidden until code sent) -->
+            <div id="telethonCodeGroup" style="display: none; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border);">
+              <div id="telethonDeliveryAlert" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.86rem; color: #e2e8f0; line-height: 1.45;">
+                <strong>📩 Куди дивитися:</strong> Telegram надсилає код <u>в офіційний додаток Telegram</u> (чат «Telegram» із зірочкою/галочкою), а <u>НЕ в звичайне SMS</u>. Відкрийте Telegram на телефоні чи ПК та перевірте вхідні службові повідомлення!
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="tgAuthCode" style="color: #34d399; font-weight: 700;">Код підтвердження з Telegram</label>
+                  <input type="text" id="tgAuthCode" placeholder="Код із повідомлення чату Telegram">
+                </div>
+                <div class="form-group">
+                  <label for="tgAuthPassword">Хмарний пароль 2FA (якщо увімкнено)</label>
+                  <input type="password" id="tgAuthPassword" placeholder="Залиште порожнім, якщо 2FA немає">
+                </div>
+              </div>
+              <button type="button" id="btnTelethonSignIn" class="btn btn-success btn-sm">
+                ✅ Підтвердити та увійти
+              </button>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-top: 12px;">
             <div class="form-group" id="tgBotTokenGroup" style="display:none;">
               <label for="tgBotToken">Токен бота Telegram (лише для режиму Bot API)</label>
               <input type="password" id="tgBotToken" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
@@ -366,7 +434,7 @@
         </div>
         <div class="form-row">
           <div class="form-group" style="flex: 2;">
-            <input type="text" id="diagTgChannel" placeholder="Введіть канал (наприклад: durov)">
+            <input type="text" id="diagTgChannel" placeholder="Введіть назву, посилання або ID каналу">
           </div>
           <div class="form-group" style="flex: 1;">
             <button type="button" id="btnDiagTestTg" class="btn btn-primary" style="width: 100%;">
@@ -404,4 +472,3 @@
   <script src="/static/app.js"></script>
 </body>
 </html>
-

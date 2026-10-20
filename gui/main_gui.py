@@ -122,68 +122,70 @@ QHeaderView::section {
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, cm: ConfigManager, db: Database, engine: ReposterEngine):
+    def __init__(self, config_manager: ConfigManager, database: Database, engine: ReposterEngine):
         super().__init__()
-        self.cm = cm
-        self.db = db
+        self.cm = config_manager
+        self.db = database
         self.engine = engine
 
         self.setWindowTitle("Репост Бот: Telegram ➔ MRIYU")
-        self.resize(920, 680)
+        self.resize(920, 720)
         self.setStyleSheet(DARK_STYLESHEET)
 
-        self._build_ui()
-        self._load_config_to_ui()
+        self._setup_ui()
+        self._load_settings()
 
-        # Status timer (updates every 2 seconds)
+        # Timer for polling status and logs
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_status)
-        self.timer.start(2000)
+        self.timer.start(2500)
 
+        # Auto-start engine if configured
+        if self.cm.config.server.auto_start:
+            self.engine.start()
         self._update_status()
 
-    def _build_ui(self):
+    def _setup_ui(self):
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(16, 16, 16, 16)
-        main_layout.setSpacing(12)
 
         # Top Control Bar
-        top_bar = QHBoxLayout()
+        control_bar = QHBoxLayout()
         self.lbl_status = QLabel("Статус: Зупинено ⏹")
         self.lbl_status.setStyleSheet("font-size: 15px; font-weight: bold; color: #f87171;")
+        control_bar.addWidget(self.lbl_status)
+
+        control_bar.addStretch()
 
         self.btn_toggle = QPushButton("▶ Запустити")
         self.btn_toggle.setObjectName("btnStart")
         self.btn_toggle.clicked.connect(self._toggle_engine)
+        control_bar.addWidget(self.btn_toggle)
 
-        self.btn_trigger = QPushButton("⚡ Перевірити зараз")
-        self.btn_trigger.setObjectName("btnSecondary")
-        self.btn_trigger.clicked.connect(self._trigger_check)
+        self.btn_check_now = QPushButton("⚡ Перевірити зараз")
+        self.btn_check_now.setObjectName("btnSecondary")
+        self.btn_check_now.clicked.connect(self._trigger_check)
+        control_bar.addWidget(self.btn_check_now)
 
-        top_bar.addWidget(self.lbl_status)
-        top_bar.addStretch()
-        top_bar.addWidget(self.btn_trigger)
-        top_bar.addWidget(self.btn_toggle)
-        main_layout.addLayout(top_bar)
+        main_layout.addLayout(control_bar)
 
-        # Stats Bar
+        # Quick Stats Row
         stats_layout = QHBoxLayout()
         self.lbl_stat_reposted = QLabel("Репостнуто: 0")
         self.lbl_stat_filtered = QLabel("Відфільтровано: 0")
         self.lbl_stat_errors = QLabel("Помилок: 0")
-        self.lbl_stat_total = QLabel("Всього оброблено: 0")
+        self.lbl_stat_total = QLabel("Всього: 0")
 
-        self.lbl_stat_reposted.setStyleSheet("color: #34d399; font-weight: bold;")
-        self.lbl_stat_filtered.setStyleSheet("color: #fbbf24; font-weight: bold;")
-        self.lbl_stat_errors.setStyleSheet("color: #f87171; font-weight: bold;")
-        self.lbl_stat_total.setStyleSheet("color: #38bdf8; font-weight: bold;")
-
-        for lbl in [self.lbl_stat_reposted, self.lbl_stat_filtered, self.lbl_stat_errors, self.lbl_stat_total]:
-            lbl.setAlignment(Qt.AlignCenter)
-            lbl.setStyleSheet(lbl.styleSheet() + " background: #1e293b; padding: 6px; border-radius: 6px;")
+        for lbl, color in [
+            (self.lbl_stat_reposted, "#34d399"),
+            (self.lbl_stat_filtered, "#fbbf24"),
+            (self.lbl_stat_errors, "#f87171"),
+            (self.lbl_stat_total, "#38bdf8")
+        ]:
+            lbl.setStyleSheet(f"background: #1e293b; padding: 6px 12px; border-radius: 6px; font-weight: bold; color: {color};")
             stats_layout.addWidget(lbl)
+
         main_layout.addLayout(stats_layout)
 
         # Tabs
@@ -203,10 +205,25 @@ class MainWindow(QMainWindow):
         tg_form = QFormLayout(tg_group)
 
         self.in_tg_channel = QLineEdit()
-        self.in_tg_channel.setPlaceholderText("durov або https://t.me/durov")
+        self.in_tg_channel.setPlaceholderText("durov або https://t.me/durov або web.telegram.org/k/#-1224603898")
 
         self.in_tg_mode = QComboBox()
-        self.in_tg_mode.addItems(["Web-скрейпер (без ключів)", "Telegram Bot API"])
+        self.in_tg_mode.addItems([
+            "Web-скрейпер (без ключів, публічні)",
+            "Telethon (api_id + hash, приватні та публічні)",
+            "Telegram Bot API"
+        ])
+        self.in_tg_mode.currentIndexChanged.connect(self._on_tg_mode_changed)
+
+        self.in_tg_api_id = QLineEdit()
+        self.in_tg_api_id.setPlaceholderText("Telegram API ID з my.telegram.org")
+
+        self.in_tg_api_hash = QLineEdit()
+        self.in_tg_api_hash.setEchoMode(QLineEdit.Password)
+        self.in_tg_api_hash.setPlaceholderText("Telegram API Hash з my.telegram.org")
+
+        self.in_tg_phone = QLineEdit()
+        self.in_tg_phone.setPlaceholderText("+380... (номер телефону для Telethon)")
 
         self.in_tg_bot_token = QLineEdit()
         self.in_tg_bot_token.setEchoMode(QLineEdit.Password)
@@ -223,6 +240,9 @@ class MainWindow(QMainWindow):
 
         tg_form.addRow("Канал Telegram:", self.in_tg_channel)
         tg_form.addRow("Режим зчитування:", self.in_tg_mode)
+        tg_form.addRow("Telegram API ID:", self.in_tg_api_id)
+        tg_form.addRow("Telegram API Hash:", self.in_tg_api_hash)
+        tg_form.addRow("Номер телефону (Telethon):", self.in_tg_phone)
         tg_form.addRow("Токен бота TG:", self.in_tg_bot_token)
         tg_form.addRow("Інтервал перевірки:", self.in_tg_interval)
         tg_form.addRow("Синхронізація на старті:", self.in_tg_sync_count)
@@ -248,84 +268,92 @@ class MainWindow(QMainWindow):
         self.in_mr_target_type.addItems(["chat (канал або група)", "user (особисті повідомлення)"])
 
         self.in_mr_target_id = QLineEdit()
-        self.in_mr_target_id.setPlaceholderText("Наприклад: 7")
+        self.in_mr_target_id.setPlaceholderText("ID каналу/чату (наприклад: 7)")
 
-        self.chk_mr_silent = QCheckBox("Публікувати тихо (silent) без сповіщення")
+        self.chk_mr_silent = QCheckBox("Публікувати без звуку (silent)")
         self.chk_mr_button = QCheckBox("Додавати кнопку під постом")
-        self.in_mr_btn_text = QLineEdit("Читати в Telegram")
+        self.in_mr_btn_text = QLineEdit("Оригінал посту")
         self.in_mr_btn_url = QLineEdit()
-        self.in_mr_btn_url.setPlaceholderText("Порожньо = оригінал посту в TG")
+        self.in_mr_btn_url.setPlaceholderText("URL (порожньо = посилання на TG)")
 
-        mr_form.addRow("Токен MRIYU:", token_row)
-        mr_form.addRow("Вибір каналу бота:", self.in_mr_chats_combo)
-        mr_form.addRow("Тип цілі:", self.in_mr_target_type)
-        mr_form.addRow("ID цілі (chat_id / user_id):", self.in_mr_target_id)
+        mr_form.addRow("Токен бота MRIYU:", token_row)
+        mr_form.addRow("Канали бота:", self.in_mr_chats_combo)
+        mr_form.addRow("Тип отримувача:", self.in_mr_target_type)
+        mr_form.addRow("Цільовий ID:", self.in_mr_target_id)
         mr_form.addRow("", self.chk_mr_silent)
         mr_form.addRow("", self.chk_mr_button)
         mr_form.addRow("Текст кнопки:", self.in_mr_btn_text)
         mr_form.addRow("URL кнопки:", self.in_mr_btn_url)
         layout.addWidget(mr_group)
 
-        # Filters & Formatting Split
-        split_layout = QHBoxLayout()
-
+        # Filter Group
         flt_group = QGroupBox("🛡️ Фільтрація")
         flt_form = QFormLayout(flt_group)
+
         self.in_flt_blacklist = QLineEdit()
-        self.in_flt_blacklist.setPlaceholderText("реклама, промокод, 18+")
-        self.chk_flt_photos = QCheckBox("Репостити фото")
-        self.chk_flt_text_only = QCheckBox("Репостити тільки текст")
-        self.chk_flt_forwards = QCheckBox("Пропускати переслані")
+        self.in_flt_blacklist.setPlaceholderText("реклама, промокод, казино")
+        self.chk_flt_photos = QCheckBox("Репостити фотографії")
+        self.chk_flt_text_only = QCheckBox("Репостити суто текстові пости")
+        self.chk_flt_forwards = QCheckBox("Пропускати переслані повідомлення")
         self.chk_flt_links = QCheckBox("Пропускати пости з посиланнями")
-        flt_form.addRow("Чорний список:", self.in_flt_blacklist)
+
+        flt_form.addRow("Чорний список слів:", self.in_flt_blacklist)
         flt_form.addRow("", self.chk_flt_photos)
         flt_form.addRow("", self.chk_flt_text_only)
         flt_form.addRow("", self.chk_flt_forwards)
         flt_form.addRow("", self.chk_flt_links)
-        split_layout.addWidget(flt_group)
+        layout.addWidget(flt_group)
 
+        # Formatting Group
         fmt_group = QGroupBox("✏️ Форматування")
         fmt_form = QFormLayout(fmt_group)
+
         self.in_fmt_prefix = QLineEdit()
+        self.in_fmt_prefix.setPlaceholderText("📢 Новини:")
         self.in_fmt_suffix = QLineEdit()
-        self.chk_fmt_source = QCheckBox("Додавати посилання на першоджерело")
-        self.chk_fmt_md = QCheckBox("Конвертувати Markdown в MRIYU")
-        self.chk_fmt_rm_urls = QCheckBox("Видаляти всі посилання з тексту")
+        self.in_fmt_suffix.setPlaceholderText("Підписуйтесь!")
+        self.chk_fmt_source = QCheckBox("Додавати посилання на першоджерело TG")
+        self.chk_fmt_md = QCheckBox("Конвертувати розмітку у Markdown MRIYU")
+        self.chk_fmt_rm_urls = QCheckBox("Видаляти зовнішні посилання з тексту")
+
         fmt_form.addRow("Шапка (префікс):", self.in_fmt_prefix)
         fmt_form.addRow("Підвал (суфікс):", self.in_fmt_suffix)
         fmt_form.addRow("", self.chk_fmt_source)
         fmt_form.addRow("", self.chk_fmt_md)
         fmt_form.addRow("", self.chk_fmt_rm_urls)
-        split_layout.addWidget(fmt_group)
-
-        layout.addLayout(split_layout)
+        layout.addWidget(fmt_group)
 
         # Save Button
-        btn_save = QPushButton("💾 Зберегти налаштування")
-        btn_save.setFixedHeight(38)
+        btn_save = QPushButton("💾 Зберегти всі налаштування")
         btn_save.clicked.connect(self._save_settings)
         layout.addWidget(btn_save)
 
         return widget
 
+    def _on_tg_mode_changed(self, idx: int):
+        is_telethon = (idx == 1)
+        is_bot_api = (idx == 2)
+        self.in_tg_api_id.setVisible(is_telethon)
+        self.in_tg_api_hash.setVisible(is_telethon)
+        self.in_tg_phone.setVisible(is_telethon)
+        self.in_tg_bot_token.setVisible(is_bot_api)
+
     def _build_history_tab(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        bar = QHBoxLayout()
+        top_row = QHBoxLayout()
         btn_refresh = QPushButton("🔄 Оновити")
-        btn_refresh.setObjectName("btnSecondary")
         btn_refresh.clicked.connect(self._load_history)
-        btn_clear = QPushButton("🗑️ Очистити історію")
-        btn_clear.setObjectName("btnStop")
+        btn_clear = QPushButton("🗑️ Очистити")
         btn_clear.clicked.connect(self._clear_history)
-        bar.addWidget(btn_refresh)
-        bar.addStretch()
-        bar.addWidget(btn_clear)
-        layout.addLayout(bar)
+        top_row.addWidget(btn_refresh)
+        top_row.addWidget(btn_clear)
+        top_row.addStretch()
+        layout.addLayout(top_row)
 
         self.table_history = QTableWidget(0, 6)
-        self.table_history.setHorizontalHeaderLabels(["ID посту", "Дата", "Тип", "Статус", "Текст", "MRIYU ID"])
+        self.table_history.setHorizontalHeaderLabels(["ID посту", "Час", "Тип", "Статус", "Текст", "MRIYU ID"])
         self.table_history.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         layout.addWidget(self.table_history)
 
@@ -335,17 +363,15 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        bar = QHBoxLayout()
-        btn_refresh = QPushButton("🔄 Оновити логи")
-        btn_refresh.setObjectName("btnSecondary")
+        top_row = QHBoxLayout()
+        btn_refresh = QPushButton("🔄 Оновити")
         btn_refresh.clicked.connect(self._load_logs)
-        btn_clear = QPushButton("🗑️ Очистити логи")
-        btn_clear.setObjectName("btnStop")
+        btn_clear = QPushButton("🗑️ Очистити")
         btn_clear.clicked.connect(self._clear_logs)
-        bar.addWidget(btn_refresh)
-        bar.addStretch()
-        bar.addWidget(btn_clear)
-        layout.addLayout(bar)
+        top_row.addWidget(btn_refresh)
+        top_row.addWidget(btn_clear)
+        top_row.addStretch()
+        layout.addLayout(top_row)
 
         self.text_logs = QTextEdit()
         self.text_logs.setReadOnly(True)
@@ -358,26 +384,26 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         layout = QVBoxLayout(widget)
 
-        # Test TG
-        tg_box = QGroupBox("🔍 Перевірка публічного каналу Telegram")
-        tg_l = QVBoxLayout(tg_box)
+        # TG Test
+        g1 = QGroupBox("🔍 Тест Telegram")
+        l1 = QVBoxLayout(g1)
         h1 = QHBoxLayout()
         self.diag_tg_in = QLineEdit()
-        self.diag_tg_in.setPlaceholderText("durov")
-        btn_test_tg = QPushButton("Перевірити")
+        self.diag_tg_in.setPlaceholderText("durov або посилання / ID")
+        btn_test_tg = QPushButton("Перевірити канал")
         btn_test_tg.clicked.connect(self._diag_test_tg)
         h1.addWidget(self.diag_tg_in)
         h1.addWidget(btn_test_tg)
-        tg_l.addLayout(h1)
+        l1.addLayout(h1)
         self.diag_tg_out = QTextEdit()
         self.diag_tg_out.setReadOnly(True)
         self.diag_tg_out.setMaximumHeight(150)
-        tg_l.addWidget(self.diag_tg_out)
-        layout.addWidget(tg_box)
+        l1.addWidget(self.diag_tg_out)
+        layout.addWidget(g1)
 
-        # Test MRIYU
-        mr_box = QGroupBox("🛸 Перевірка з'єднання з MRIYU Bot API")
-        mr_l = QVBoxLayout(mr_box)
+        # MRIYU Test
+        g2 = QGroupBox("🛸 Тест MRIYU API")
+        l2 = QVBoxLayout(g2)
         h2 = QHBoxLayout()
         self.diag_mr_in = QLineEdit()
         self.diag_mr_in.setEchoMode(QLineEdit.Password)
@@ -386,20 +412,32 @@ class MainWindow(QMainWindow):
         btn_test_mr.clicked.connect(self._diag_test_mr)
         h2.addWidget(self.diag_mr_in)
         h2.addWidget(btn_test_mr)
-        mr_l.addLayout(h2)
+        l2.addLayout(h2)
         self.diag_mr_out = QTextEdit()
         self.diag_mr_out.setReadOnly(True)
         self.diag_mr_out.setMaximumHeight(150)
-        mr_l.addWidget(self.diag_mr_out)
-        layout.addWidget(mr_box)
+        l2.addWidget(self.diag_mr_out)
+        layout.addWidget(g2)
 
+        layout.addStretch()
         return widget
 
-    def _load_config_to_ui(self):
+    def _load_settings(self):
         cfg = self.cm.config
         self.in_tg_channel.setText(cfg.telegram.channel)
-        self.in_tg_mode.setCurrentIndex(0 if cfg.telegram.mode == "scraper" else 1)
-        self.in_tg_bot_token.setText(cfg.telegram.bot_token)
+
+        mode_idx = 0
+        if cfg.telegram.mode == "telethon":
+            mode_idx = 1
+        elif cfg.telegram.mode == "bot_api":
+            mode_idx = 2
+        self.in_tg_mode.setCurrentIndex(mode_idx)
+        self._on_tg_mode_changed(mode_idx)
+
+        self.in_tg_api_id.setText(cfg.telegram.api_id or "")
+        self.in_tg_api_hash.setText(cfg.telegram.api_hash or "")
+        self.in_tg_phone.setText(cfg.telegram.phone or "")
+        self.in_tg_bot_token.setText(cfg.telegram.bot_token or "")
         self.in_tg_interval.setValue(cfg.telegram.poll_interval)
         self.in_tg_sync_count.setValue(cfg.telegram.initial_sync_count)
 
@@ -424,10 +462,15 @@ class MainWindow(QMainWindow):
         self.chk_fmt_rm_urls.setChecked(cfg.formatting.remove_urls)
 
     def _save_settings(self):
+        modes = ["scraper", "telethon", "bot_api"]
+        chosen_mode = modes[self.in_tg_mode.currentIndex()]
         upd = {
             "telegram": {
                 "channel": self.in_tg_channel.text().strip(),
-                "mode": "scraper" if self.in_tg_mode.currentIndex() == 0 else "bot_api",
+                "mode": chosen_mode,
+                "api_id": self.in_tg_api_id.text().strip(),
+                "api_hash": self.in_tg_api_hash.text().strip(),
+                "phone": self.in_tg_phone.text().strip(),
                 "bot_token": self.in_tg_bot_token.text().strip(),
                 "poll_interval": self.in_tg_interval.value(),
                 "initial_sync_count": self.in_tg_sync_count.value(),
@@ -545,9 +588,34 @@ class MainWindow(QMainWindow):
         ch = self.diag_tg_in.text().strip() or self.in_tg_channel.text().strip()
         if not ch:
             return
+
+        if self.in_tg_mode.currentIndex() == 1:
+            # Telethon mode
+            from core.tg_telethon import TelethonService
+            service = TelethonService.get_instance()
+            try:
+                posts = service.fetch_channel_posts(
+                    ch,
+                    limit=5,
+                    api_id=self.in_tg_api_id.text().strip(),
+                    api_hash=self.in_tg_api_hash.text().strip()
+                )
+                if not posts:
+                    self.diag_tg_out.setPlainText("❌ Telethon не повернув постів з цього каналу/чату.")
+                    return
+                lines = [f"✅ Telethon: успішно отримано {len(posts)} постів:"]
+                for p in posts[-3:]:
+                    lines.append(f"- ID: {p.post_id} | Фото: {len(p.photos)} | Текст: {p.raw_text[:60]}...")
+                self.diag_tg_out.setPlainText("\n".join(lines))
+                return
+            except Exception as e:
+                self.diag_tg_out.setPlainText(f"❌ Помилка Telethon: {e}")
+                return
+
+        # Scraper mode
         posts = TelegramScraper.fetch_channel_posts(ch)
         if not posts:
-            self.diag_tg_out.setPlainText("❌ Не вдалося отримати пости. Перевірте публічність каналу.")
+            self.diag_tg_out.setPlainText("❌ Не вдалося отримати пости. Перевірте публічність каналу або увімкніть Telethon.")
             return
         lines = [f"✅ Отримано {len(posts)} постів з каналу:"]
         for p in posts[-3:]:
@@ -580,4 +648,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

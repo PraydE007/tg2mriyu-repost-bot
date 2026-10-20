@@ -24,10 +24,15 @@ class TextReplacement:
 @dataclass
 class TelegramConfig:
     channel: str = ""  # channel username or link (e.g. 'durov' or 'https://t.me/durov')
-    mode: str = "scraper"  # 'scraper' (public t.me/s) or 'bot_api'
+    mode: str = "scraper"  # 'scraper' (public t.me/s), 'bot_api', or 'telethon'
     bot_token: str = ""  # optional: telegram bot token if using bot_api
     poll_interval: int = 60  # seconds between checks
     initial_sync_count: int = 3  # how many recent posts to sync on first run (0 = only future posts)
+    # Telethon client settings
+    api_id: str = ""  # Telegram API ID from https://my.telegram.org
+    api_hash: str = ""  # Telegram API Hash from https://my.telegram.org
+    phone: str = ""  # Phone number with country code (e.g. +380991234567)
+    session_name: str = "telethon_session"  # Session name stored in data/
 
 
 @dataclass
@@ -148,4 +153,3 @@ class ConfigManager:
         self.config = AppConfig.from_dict(current_dict)
         self.save()
         return self.config
-
