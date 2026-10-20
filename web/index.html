@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Репост Бот: Telegram ➔ MRIYU</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E<text y=%2226%22 font-size=%2224%22>🚀</text></svg>">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="logo-area">
+        <div class="logo-badge">⚡</div>
+        <div class="logo-title">
+          <h1>Репост Бот Telegram ➔ MRIYU</h1>
+          <p>Автоматична трансляція контенту з Telegram у соцмережу MRIYU</p>
+        </div>
+      </div>
+      <div class="header-status">
+        <div id="statusBadge" class="badge badge-stopped">
+          <span class="badge-dot"></span>
+          <span id="statusText">Зупинено</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Quick Control Card -->
+    <div class="control-card">
+      <div class="control-info">
+        <div style="font-size: 0.95rem; font-weight: 600;">
+          Джерело: <span id="infoChannel" style="color: var(--accent-cyan);">не налаштовано</span> 
+          ➔ 
+          Ціль MRIYU: <span id="infoTarget" style="color: #34d399;">не налаштовано</span>
+        </div>
+        <div style="font-size: 0.8rem; color: var(--text-muted);">
+          Остання перевірка: <span id="infoLastCheck">—</span> | Наступна: <span id="infoNextCheck">—</span>
+        </div>
+        <div id="infoLastError" style="display:none; font-size: 0.8rem; color: var(--danger); margin-top: 4px;"></div>
+      </div>
+      <div class="control-actions">
+        <button id="btnToggleEngine" class="btn btn-success">
+          <span>▶ Запустити рушій</span>
+        </button>
+        <button id="btnTriggerCheck" class="btn btn-outline" title="Виконати цикл перевірки прямо зараз">
+          <span>⚡ Перевірити зараз</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div id="statReposted" class="stat-value" style="color: #34d399;">0</div>
+        <div class="stat-label">Репостнуто</div>
+      </div>
+      <div class="stat-card">
+        <div id="statFiltered" class="stat-value" style="color: #fbbf24;">0</div>
+        <div class="stat-label">Відфільтровано</div>
+      </div>
+      <div class="stat-card">
+        <div id="statErrors" class="stat-value" style="color: #f87171;">0</div>
+        <div class="stat-label">Помилок</div>
+      </div>
+      <div class="stat-card">
+        <div id="statTotal" class="stat-value" style="color: var(--accent-cyan);">0</div>
+        <div class="stat-label">Всього оброблено</div>
+      </div>
+    </div>
+
+    <!-- Tabs Nav -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-settings">⚙️ Налаштування</button>
+      <button class="tab-btn" data-tab="tab-history">📋 Історія постів</button>
+      <button class="tab-btn" data-tab="tab-logs">📜 Журнал логів</button>
+      <button class="tab-btn" data-tab="tab-test">🧪 Діагностика</button>
+    </div>
+
+    <!-- TAB: SETTINGS -->
+    <div id="tab-settings" class="tab-content active">
+      <form id="settingsForm">
+        
+        <!-- Telegram Section -->
+        <div class="settings-section">
+          <div class="section-title">
+            <span>📢 Джерело: Telegram канал</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tgChannel">Канал Telegram (назва або посилання)</label>
+              <input type="text" id="tgChannel" placeholder="наприклад: durov або https://t.me/durov" required>
+              <div class="form-hint">Публічний канал можна читати напряму без токенів та авторизацій.</div>
+            </div>
+            <div class="form-group">
+              <label for="tgMode">Режим зчитування</label>
+              <select id="tgMode">
+                <option value="scraper">Web-скрейпер (без ключів, публічні канали)</option>
+                <option value="bot_api">Telegram Bot API (потрібен токен бота)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" id="tgBotTokenGroup" style="display:none;">
+              <label for="tgBotToken">Токен бота Telegram (лише для режиму Bot API)</label>
+              <input type="password" id="tgBotToken" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+            </div>
+            <div class="form-group">
+              <label for="tgPollInterval">Інтервал перевірки (секунди)</label>
+              <input type="number" id="tgPollInterval" min="10" max="3600" value="60">
+              <div class="form-hint">Як часто бот опитує канал (рекомендовано 30–120 секунд).</div>
+            </div>
+            <div class="form-group">
+              <label for="tgSyncCount">Кількість останніх постів при першому запуску</label>
+              <input type="number" id="tgSyncCount" min="0" max="50" value="3">
+              <div class="form-hint">0 = репостити лише майбутні нові пости; >0 = опублікувати вказану кількість свіжих.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MRIYU Section -->
+        <div class="settings-section">
+          <div class="section-title">
+            <span>🛸 Ціль: Соціальна мережа MRIYU</span>
+          </div>
+          <div class="form-group">
+            <label for="mriyuToken">Токен бота MRIYU (Bot API Bearer Token)</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="password" id="mriyuToken" placeholder="Вставте токен з mriyu.com/developers?bots" required style="flex: 1;">
+              <button type="button" id="btnTestMriyu" class="btn btn-outline" style="white-space: nowrap;">
+                🔍 Завантажити канали
+              </button>
+            </div>
+            <div class="form-hint">Створіть бота в розділі «Розробникам» ➔ «Боти» (mriyu.com/developers?bots) і скопіюйте токен.</div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="mriyuTargetType">Тип отримувача</label>
+              <select id="mriyuTargetType">
+                <option value="chat">Канал або груповий чат (chat_id)</option>
+                <option value="user">Особисті повідомлення користувачу (user_id)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="mriyuTargetId">ID цільового каналу / чату</label>
+              <input type="text" id="mriyuTargetId" placeholder="Наприклад: 7" required>
+              <div class="form-hint">Номер каналу/чату в MRIYU, де бот є адміністратором.</div>
+            </div>
+          </div>
+
+          <div id="mriyuChannelsDropdownGroup" class="form-group" style="display: none;">
+            <label>Доступні канали бота (виберіть для автозаповнення):</label>
+            <select id="mriyuChannelsSelect">
+              <option value="">-- Оберіть канал із списку --</option>
+            </select>
+          </div>
+
+          <div class="form-row" style="margin-top: 10px;">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="mriyuSilent">
+                <span>Публікувати тихо (silent) — без звуку сповіщення</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="mriyuAddButton">
+                <span>Додавати інлайн-кнопку під повідомленням</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="buttonSettingsRow" class="form-row" style="display: none;">
+            <div class="form-group">
+              <label for="mriyuButtonText">Текст кнопки</label>
+              <input type="text" id="mriyuButtonText" value="Оригінал посту" placeholder="Читати в Telegram">
+            </div>
+            <div class="form-group">
+              <label for="mriyuButtonUrl">URL посилання кнопки (порожньо = оригінальне посилання на пост)</label>
+              <input type="text" id="mriyuButtonUrl" placeholder="https://...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="settings-section">
+          <div class="section-title">
+            <span>🛡️ Фільтрація повідомлень</span>
+          </div>
+          <div class="form-group">
+            <label for="filterBlacklist">Чорний список слів (через кому)</label>
+            <textarea id="filterBlacklist" rows="2" placeholder="реклама, промокод, казино, 18+, знижка"></textarea>
+            <div class="form-hint">Якщо пост містить хоча б одне з цих слів, він буде пропущений.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="filterWhitelist">Білий список слів (через кому, необов'язково)</label>
+            <textarea id="filterWhitelist" rows="2" placeholder="новини, оновлення, реліз"></textarea>
+            <div class="form-hint">Якщо вказано, публікуватимуться ЛИШЕ пости, що містять хоча б одне з цих слів. Порожньо = без обмежень.</div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="filterMinLength">Мінімальна довжина тексту (символів)</label>
+              <input type="number" id="filterMinLength" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label for="filterMaxLength">Максимальна довжина тексту (0 = без обмеження)</label>
+              <input type="number" id="filterMaxLength" min="0" value="0">
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-top: 10px;">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="filterAllowPhotos" checked>
+                <span>Репостити фотографії</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="filterAllowTextOnly" checked>
+                <span>Репостити суто текстові пости</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="filterIgnoreForwards">
+                <span>Пропускати переслані пости</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="filterSkipLinks">
+                <span>Пропускати пости із зовнішніми посиланнями</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Formatting & Text Transformation Section -->
+        <div class="settings-section">
+          <div class="section-title">
+            <span>✏️ Форматування та трансформація тексту</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="fmtHeaderPrefix">Шапка / Префікс (додається на початку посту)</label>
+              <input type="text" id="fmtHeaderPrefix" placeholder="📢 Новини з каналу:">
+            </div>
+            <div class="form-group">
+              <label for="fmtFooterSuffix">Підвал / Суфікс (додається в кінці)</label>
+              <input type="text" id="fmtFooterSuffix" placeholder="Підписуйтесь на наш канал!">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="fmtAddSourceLink" checked>
+                <span>Додавати клікабельне посилання на першоджерело у Telegram</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label for="fmtSourceLinkText">Текст посилання на джерело</label>
+              <input type="text" id="fmtSourceLinkText" value="Джерело в Telegram">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="fmtConvertMarkdown" checked>
+                <span>Конвертувати розмітку Telegram у Markdown MRIYU (**жирний**, __курсив__, посилання)</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="fmtRemoveUrls">
+                <span>Видаляти всі посилання з тексту посту</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="fmtRemoveHashtags">
+                <span>Видаляти хештеги (#новини) з тексту</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Replacements rules -->
+          <div style="margin-top: 14px;">
+            <label style="font-weight: 700;">Правила автозаміни слів та тексту:</label>
+            <table class="replacements-table" id="replacementsTable">
+              <thead>
+                <tr>
+                  <th style="width: 45%;">Що замінити</th>
+                  <th style="width: 45%;">На що замінити</th>
+                  <th style="width: 10%;">Дія</th>
+                </tr>
+              </thead>
+              <tbody id="replacementsBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+            <button type="button" id="btnAddReplacement" class="btn btn-outline btn-sm">
+              + Додати правило заміни
+            </button>
+          </div>
+        </div>
+
+        <div style="text-align: right; margin-bottom: 40px;">
+          <button type="submit" class="btn btn-primary" style="padding: 12px 28px; font-size: 1rem;">
+            💾 Зберегти всі налаштування
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- TAB: HISTORY -->
+    <div id="tab-history" class="tab-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 1.1rem;">Останні оброблені публікації</h3>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnRefreshHistory" class="btn btn-outline btn-sm">🔄 Оновити</button>
+          <button id="btnClearHistory" class="btn btn-danger btn-sm">🗑️ Очистити історію</button>
+        </div>
+      </div>
+      <div id="historyList" class="posts-list">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+
+    <!-- TAB: LOGS -->
+    <div id="tab-logs" class="tab-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+        <h3 style="font-size: 1.1rem;">Журнал подій у реальному часі</h3>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <select id="logLevelFilter" style="width: auto; padding: 4px 8px; font-size: 0.85rem;">
+            <option value="">Всі рівні</option>
+            <option value="INFO">INFO</option>
+            <option value="SUCCESS">SUCCESS</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+          <button id="btnRefreshLogs" class="btn btn-outline btn-sm">🔄 Оновити</button>
+          <button id="btnClearLogs" class="btn btn-danger btn-sm">🗑️ Очистити</button>
+        </div>
+      </div>
+      <div id="logsTerminal" class="logs-terminal">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+
+    <!-- TAB: DIAGNOSTICS & TEST -->
+    <div id="tab-test" class="tab-content">
+      <!-- Test Telegram -->
+      <div class="settings-section">
+        <div class="section-title">
+          <span>🔍 Тестування зчитування Telegram каналу</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <input type="text" id="diagTgChannel" placeholder="Введіть канал (наприклад: durov)">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <button type="button" id="btnDiagTestTg" class="btn btn-primary" style="width: 100%;">
+              Перевірити канал
+            </button>
+          </div>
+        </div>
+        <div id="diagTgResult" style="margin-top: 12px; display: none;"></div>
+      </div>
+
+      <!-- Test MRIYU -->
+      <div class="settings-section">
+        <div class="section-title">
+          <span>🛸 Тестування підключення до MRIYU API</span>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex: 2;">
+            <input type="password" id="diagMriyuToken" placeholder="Введіть токен бота MRIYU">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <button type="button" id="btnDiagTestMriyu" class="btn btn-primary" style="width: 100%;">
+              Перевірити токен
+            </button>
+          </div>
+        </div>
+        <div id="diagMriyuResult" style="margin-top: 12px; display: none;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast">Повідомлення</div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
