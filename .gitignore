@@ -5,3 +5,4 @@ data/*.db
 data/config.json
 .venv/
 env/
+
