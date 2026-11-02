@@ -2,6 +2,21 @@
 
 Потужний, автономний репост-бот для автоматичної трансляції публікацій із вказаного Telegram-каналу до соціальної мережі **[MRIYU](https://mriyu.com)** згідно з офіційною документацією [MRIYU Bot API](https://mriyu.com/wiki/bot-api).
 
+<p align="center">
+  <b>💖 Підтримати проєкт / Support the project:</b><br><br>
+  <a href="https://send.monobank.ua/jar/5uPPFW5FqV" target="_blank" rel="noopener noreferrer">
+    <img src="./icons/UAH.png" alt="UAH" width="128" height="128" style="vertical-align: middle; margin-right: 6px;" />
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://send.monobank.ua/jar/5uPPFW5FqV" target="_blank" rel="noopener noreferrer">
+    <img src="./icons/DOLLAR.png" alt="USD" width="128" height="128" style="vertical-align: middle; margin-right: 6px;" />
+  </a>
+  &nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://send.monobank.ua/jar/5uPPFW5FqV" target="_blank" rel="noopener noreferrer">
+    <img src="./icons/EURO.png" alt="EUR" width="128" height="128" style="vertical-align: middle; margin-right: 6px;" />
+  </a>
+</p>
+
 ---
 
 ## 🌟 Ключові можливості
@@ -119,3 +134,16 @@ python run_gui.py
    - Бот автоматично перевірить токен і завантажить список усіх каналів, куди його додано!
    - Оберіть потрібний канал зі списку, і його `chat_id` підставиться автоматично.
 6. Натисніть **«💾 Зберегти налаштування»** та **«▶ Запустити рушій»**!
+
+---
+
+## 💖 Підтримати проєкт (Донат)
+
+Якщо вам подобається цей проєкт і ви бажаєте підтримати його подальший розвиток та оновлення:
+
+| Валюта | Посилання для донату | Опис |
+| :---: | :---: | :---: |
+| **UAH (₴)** | [Монобанка (Гривня)](https://send.monobank.ua/jar/5uPPFW5FqV) | Прямий переказ Monobank |
+| **USD ($)** | [Монобанка (USD)](https://send.monobank.ua/jar/5uPPFW5FqV) | Картки будь-яких країн, Apple Pay, Google Pay |
+| **EUR (€)** | [Монобанка (EUR)](https://send.monobank.ua/jar/5uPPFW5FqV) | Картки будь-яких країн, Apple Pay, Google Pay |
+

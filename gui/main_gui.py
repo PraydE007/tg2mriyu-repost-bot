@@ -87,6 +87,12 @@ QPushButton#btnSecondary {
 QPushButton#btnSecondary:hover {
     background-color: #475569;
 }
+QPushButton#btnDonate {
+    background-color: #db2777;
+}
+QPushButton#btnDonate:hover {
+    background-color: #be185d;
+}
 QTabWidget::pane {
     border: 1px solid #334155;
     border-radius: 8px;
@@ -167,6 +173,12 @@ class MainWindow(QMainWindow):
         self.btn_check_now.setObjectName("btnSecondary")
         self.btn_check_now.clicked.connect(self._trigger_check)
         control_bar.addWidget(self.btn_check_now)
+
+        self.btn_donate = QPushButton("💖 Донат")
+        self.btn_donate.setObjectName("btnDonate")
+        self.btn_donate.setToolTip("Підтримати розробку проєкту через Monobank")
+        self.btn_donate.clicked.connect(self._open_donation_link)
+        control_bar.addWidget(self.btn_donate)
 
         main_layout.addLayout(control_bar)
 
@@ -512,6 +524,11 @@ class MainWindow(QMainWindow):
     def _trigger_check(self):
         self.engine.trigger_manual_check()
         QMessageBox.information(self, "Запит", "Позачергову перевірку запущено!")
+
+    def _open_donation_link(self):
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl("https://send.monobank.ua/jar/5uPPFW5FqV"))
 
     def _update_status(self):
         st = self.engine.get_status()

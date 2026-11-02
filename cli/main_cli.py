@@ -161,8 +161,9 @@ def interactive_menu(cm: ConfigManager, db: Database):
         print("4. Перевірити MRIYU токен та канали")
         print("5. Переглянути останні логи")
         print("6. Швидке налаштування (канал, токен, chat_id, Telethon)")
+        print("7. 💖 Підтримати проєкт (Донат)")
         print("0. Вихід")
-        choice = input("\nОберіть дію [0-6]: ").strip()
+        choice = input("\nОберіть дію [0-7]: ").strip()
 
         if choice == "1":
             cmd_status(cm, db)
@@ -198,6 +199,10 @@ def interactive_menu(cm: ConfigManager, db: Database):
             if upd:
                 cm.update(upd)
                 print("✅ Налаштування збережено!")
+        elif choice == "7":
+            print("\n💖 Дякуємо за бажання підтримати проєкт!")
+            print("🔗 Посилання на Монобанку (UAH / USD / EUR):")
+            print("👉 https://send.monobank.ua/jar/5uPPFW5FqV\n")
         elif choice == "0":
             break
         input("\nНатисніть Enter для продовження...")
@@ -213,6 +218,7 @@ def main():
     subparsers.add_parser("status", help="Показати статус та статистику")
     subparsers.add_parser("run", help="Запустити рушій в консолі")
     subparsers.add_parser("logs", help="Показати останні логи")
+    subparsers.add_parser("donate", help="Посилання для підтримки проєкту (донат)")
 
     tg_p = subparsers.add_parser("test-tg", help="Перевірити TG канал")
     tg_p.add_argument("channel", nargs="?", default="", help="Назва каналу")
@@ -233,6 +239,9 @@ def main():
         cmd_test_tg(cm, ch)
     elif args.subcommand == "test-mriyu":
         cmd_test_mriyu(cm, args.token)
+    elif args.subcommand == "donate":
+        print("\n💖 Дякуємо за підтримку проєкту!")
+        print("🔗 Монобанка: https://send.monobank.ua/jar/5uPPFW5FqV\n")
     else:
         interactive_menu(cm, db)
 
